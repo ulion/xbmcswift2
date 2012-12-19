@@ -50,7 +50,7 @@ class UrlRule(object):
         self._url_format = self._url_rule.replace('<', '{').replace('>', '}')
 
         # Make a regex pattern for matching incoming URLs
-        p = self._url_rule.replace('<', '(?P<').replace('>', '>[^/]+?)')
+        p = self._url_rule.replace('<', '(?P<').replace('>', '>[^/]*?)')
 
         try:
             self._regex = re.compile('^' + p + '$')
