@@ -228,11 +228,25 @@ class XBMCMixin(object):
         xbmc.executebuiltin('XBMC.Notification("%s", "%s", "%s", "%s")' %
                             (msg, title, delay, image))
 
-    def set_resolved_url(self, url):
-        item = xbmcswift2.ListItem(path=url)
+    def set_resolved_url(self, url=None, mimetype=None, succeeded=True):
+        if isinstance(url, basestring):
+            item = xbmcswift2.ListItem(path=url)
+        elif type(url) == dict:
+            item = xbmcswift2.ListItem.from_dict(**url)
+        elif succeeded:
+            assert False, 'set_resolved_url accepts a url or dict item when resolve success, or you have to call it with succeeded=False.'
+        else:
+            # dummy item for the failed setResolvedUrl call only.
+            item = xbmcswift2.ListItem()
+        if mimetype:
+            item.set_property('mimetype', mimetype)
         item.set_played(True)
-        xbmcplugin.setResolvedUrl(self.handle, True, item.as_xbmc_listitem())
-        return [item]
+        if not self._end_of_directory:
+            xbmcplugin.setResolvedUrl(self.handle, succeeded, item.as_xbmc_listitem())
+            # prevent from auto call endOfDirectory, which will not work because the handle already be erased by xbmc
+            self._end_of_directory = True
+            return [item]
+        assert False, 'Already called endOfDirectory or setResolvedUrl.'
 
     def play_video(self, item, player=xbmc.PLAYER_CORE_DVDPLAYER):
         if not hasattr(item, 'as_xbmc_listitem'):
