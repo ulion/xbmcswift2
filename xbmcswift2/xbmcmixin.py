@@ -229,15 +229,19 @@ class XBMCMixin(object):
                             (msg, title, delay, image))
 
     def set_resolved_url(self, url=None, mimetype=None, succeeded=True):
-        if isinstance(url, basestring):
-            item = xbmcswift2.ListItem(path=url)
-        elif type(url) == dict:
-            item = xbmcswift2.ListItem.from_dict(**url)
-        elif succeeded:
-            assert False, 'set_resolved_url accepts a url or dict item when resolve success, or you have to call it with succeeded=False.'
+        if url:
+            if isinstance(url, basestring):
+                item = xbmcswift2.ListItem(path=url)
+            elif hasattr(url, 'as_xbmc_listitem'):
+                item = url
+            elif type(url) == dict:
+                item = xbmcswift2.ListItem.from_dict(**url)
+            else:
+                assert False, 'Unsupported url/item: %s' % repr(url)
         else:
             # dummy item for the failed setResolvedUrl call only.
             item = xbmcswift2.ListItem()
+        assert not succeeded or item.path, 'A resolved url must be set by either url or dict item or listitem if the resolve success, or you have to call set_resolved_url(succeeded=False).'
         if mimetype:
             item.set_property('mimetype', mimetype)
         item.set_played(True)
