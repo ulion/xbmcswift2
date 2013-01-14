@@ -10,6 +10,7 @@
 import os
 import sys
 import logging
+import re
 from xml.etree import ElementTree as ET
 
 from xbmcswift2 import Plugin, ListItem, logger
@@ -114,18 +115,25 @@ class PluginManager(object):
         self.mode = mode
         self.url = url
 
+    handle = 0
+
+    @classmethod
+    def generate_handle(cls):
+        h = PluginManager.handle
+        PluginManager.handle += 1
+        return h
+
     def run(self):
         '''This method runs the the plugin in the appropriate mode parsed from
         the command line options.
         '''
-        handle = 0
         handlers = {
            Modes.ONCE: once,
            Modes.CRAWL: crawl,
            Modes.INTERACTIVE: interactive,
         }
         handler = handlers[self.mode]
-        patch_sysargv(self.url or 'plugin://%s/' % self.plugin.id, handle)
+        patch_sysargv(self.url or 'plugin://%s/' % self.plugin.id, PluginManager.generate_handle())
         return handler(self.plugin)
 
 
@@ -139,7 +147,7 @@ def patch_plugin(plugin, path, handle=None):
     plugin.run()
     '''
     if handle is None:
-        handle = plugin.request.handle
+        handle = PluginManager.generate_handle()
     patch_sysargv(path, handle)
     plugin._end_of_directory = False
 
@@ -156,6 +164,49 @@ def once(plugin, parent_item=None):
     display_listitems(items)
     return items
 
+def run_plugin(plugin, path):
+    patch_plugin(plugin, path, handle=-1)
+    plugin.clear_added_items()
+    plugin.run()
+
+def do_action(plugin, action):
+    CONTAINER_UPDATE_RE = re.compile('^Container.Update\((.*),(False|True)\)$')
+    RUN_PLUGIN_RE = re.compile('^RunPlugin\((.*)\)$')
+    if action == 'Container.Refresh':
+        return plugin.request.url
+    m = CONTAINER_UPDATE_RE.match(action)
+    if m:
+        plugin_path = m.group(1)
+        if plugin_path.startswith('plugin://%s/' % plugin.id):
+            return plugin_path
+    m = RUN_PLUGIN_RE.match(action)
+    if m:
+        plugin_path = m.group(1)
+        if plugin_path.startswith('plugin://%s/' % plugin.id):
+            current_path = plugin.request.url
+            run_plugin(plugin, plugin_path)
+            return current_path
+    print 'CLI not implemented action [%s]' % action
+    
+
+def do_context_menu(plugin, item):
+    mitems = item.get_context_menu_items()
+    if not mitems:
+        print 'No context menu for item %s' % item
+        return
+    i = 0
+    print 'Context menu of item %s' % item
+    for label, action in mitems:
+        print '[%d] %s\t%s' % (i, label, action)
+        i += 1
+    selected_item, suffix = get_user_choice(mitems, qaction='return')
+    if selected_item is None:
+        print 'Returned from context menu of item %s' % item
+        return
+    label, action = selected_item
+    print 'User choosed context menu item %s, action %s' % (label, action)
+    new_path = do_action(plugin, action)
+    return new_path
 
 def interactive(plugin):
     '''A run mode for the CLI that runs the plugin in a loop based on user
@@ -164,16 +215,28 @@ def interactive(plugin):
     items = [item for item in once(plugin) if not item.get_played()]
     parent_stack = []  # Keep track of parents so we can have a '..' option
 
-    selected_item = get_user_choice(items)
+    selected_item, suffix = get_user_choice(items, suffix_allow='c')
     while selected_item is not None:
         if parent_stack and selected_item == parent_stack[-1]:
             # User selected the parent item, remove from list
             parent_stack.pop()
+            new_path = selected_item.get_path()
+        elif suffix:
+            # User selected to show context menu for an item
+            new_path = do_context_menu(plugin, selected_item)
+            if not new_path:
+                display_listitems(items)
+                selected_item, suffix = get_user_choice(items, suffix_allow='c')
+                continue
+            if new_path != plugin.request.url:
+                parent_stack.append(ListItem.from_dict(label='..',
+                                                       path=plugin.request.url))
         else:
             # User selected non parent item, add current url to parent stack
             parent_stack.append(ListItem.from_dict(label='..',
                                                    path=plugin.request.url))
-        patch_plugin(plugin, selected_item.get_path())
+            new_path = selected_item.get_path()
+        patch_plugin(plugin, new_path)
 
         # If we have parent items, include the top of the stack in the list
         # item display
@@ -182,7 +245,7 @@ def interactive(plugin):
             parent_item = parent_stack[-1]
         items = [item for item in once(plugin, parent_item=parent_item)
                  if not item.get_played()]
-        selected_item = get_user_choice(items)
+        selected_item, suffix = get_user_choice(items, suffix_allow='c')
 
 
 def crawl(plugin):
