@@ -67,16 +67,26 @@ def display_video(items):
     print '\n'.join(output)
 
 
-def get_user_choice(items):
+def get_user_choice_id(items, qaction='quit', suffix_allow=None):
     '''Returns the selected item from provided items or None if 'q' was
     entered for quit.
     '''
-    choice = raw_input('Choose an item or "q" to quit: ')
+    if isinstance(suffix_allow, basestring):
+        suffix_allow = [suffix_allow]
+    choice = raw_input('Choose an item or "q" to %s: ' % qaction)
     while choice != 'q':
         try:
+            suffix = None
+            if suffix_allow:
+                c = choice.strip()
+                for s in suffix_allow:
+                    if c.endswith(s):
+                        choice = c[:-len(s)]
+                        suffix = s
+                        break
             item = items[int(choice)]
             print  # Blank line for readability between interactive views
-            return item
+            return (int(choice), suffix)
         except ValueError:
             # Passed something that cound't be converted with int()
             choice = raw_input('You entered a non-integer. Choice must be an'
@@ -85,8 +95,13 @@ def get_user_choice(items):
             # Passed an integer that was out of range of the list of urls
             choice = raw_input('You entered an invalid integer. Choice must be'
                                ' from above url list or "q": ')
-    return None
+    return (-1, None)
 
+def get_user_choice(items, qaction='quit', suffix_allow=None):
+    id, suffix = get_user_choice_id(items, qaction, suffix_allow)
+    if id >= 0:
+        return (items[id], suffix)
+    return (None, None)
 
 def continue_or_quit():
     '''Prints an exit message and returns False if the user wants to
