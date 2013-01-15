@@ -281,7 +281,7 @@ class XBMCMixin(object):
             item = xbmcswift2.ListItem.from_dict(**item)
         return item
 
-    def set_resolved_url(self, item=None):
+    def set_resolved_url(self, item=None, mimetype=None):
         '''Takes a url or a listitem to be played. Used in conjunction with a
         playable list item with a path that calls back into your addon.
 
@@ -290,6 +290,7 @@ class XBMCMixin(object):
                     Use `item` instead. A playable URL.
         :param item: A playable list item or url.
                      None item will tell xbmc the resolve failed.
+        :param mimetype: optional mimetype can be set.
         '''
         if item is None:
             # None item/url indicates the resolve url failed.
@@ -301,6 +302,8 @@ class XBMCMixin(object):
             item = {'path': item}
 
         item = self._listitemify(item)
+        if mimetype:
+            item.set_property('mimetype', mimetype)
         item.set_played(True)
         xbmcplugin.setResolvedUrl(self.handle, True, item.as_xbmc_listitem())
         return [item]
