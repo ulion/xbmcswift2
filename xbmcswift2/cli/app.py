@@ -152,15 +152,24 @@ def patch_plugin(plugin, path, handle=None):
     plugin._end_of_directory = False
 
 
-def once(plugin, parent_item=None):
+def once(plugin, parent_stack=[]):
     '''A run mode for the CLI that runs the plugin once and exits.'''
     plugin.clear_added_items()
     items = plugin.run()
 
-    # Prepend the parent_item if given
-    if parent_item is not None:
-        items.insert(0, parent_item)
+    if items is None:
+        print 'plugin [%s] run return None' % plugin.request.url
+        # pretend empty result, let user choose exit to previous dir
+        items = []
 
+    if plugin._update_listing and parent_stack:
+        del parent_stack[-1]
+    # If we have parent items, include the top of the stack in the list
+    # item display
+    if parent_stack:
+        items.insert(0, parent_stack[-1])
+
+    print 'Current path: (%s)' % plugin.request.url
     display_listitems(items)
     return items
 
@@ -226,6 +235,7 @@ def interactive(plugin):
             current_path = plugin.request.url
             new_path = do_context_menu(plugin, selected_item)
             if not new_path:
+                print 'Current path: (%s)' % plugin.request.url
                 display_listitems(items)
                 selected_item, suffix = get_user_choice(items, suffix_allow='c')
                 continue
@@ -239,12 +249,7 @@ def interactive(plugin):
             new_path = selected_item.get_path()
         patch_plugin(plugin, new_path)
 
-        # If we have parent items, include the top of the stack in the list
-        # item display
-        parent_item = None
-        if parent_stack:
-            parent_item = parent_stack[-1]
-        items = [item for item in once(plugin, parent_item=parent_item)
+        items = [item for item in once(plugin, parent_stack=parent_stack)
                  if not item.get_played()]
         selected_item, suffix = get_user_choice(items, suffix_allow='c')
 
